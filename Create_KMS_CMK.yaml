@@ -12,7 +12,7 @@ DatalakeKey:
           Action: "kms:*"
           Effect: Allow
           Principal: 
-            AWS: "arn:aws:iam::412164052405:root"
+            AWS: "arn:aws:iam::xxxxxxxxxx:root"
             Resources: "*"
           Sid: "Enable IAM User Permissions"
         - 
@@ -31,7 +31,7 @@ DatalakeKey:
             - "kms:CancelKeyDeletion"
           Effect: Allow
           Principal: 
-            AWS: "arn:aws:iam::412164052405:user/jchirayathADMIN"
+            AWS: "arn:aws:iam::xxxxxxxxxxx:user/jchirayathADMIN"
             Resources: "*"
           Sid: "Allow administration of the key"
         - 
@@ -44,7 +44,7 @@ DatalakeKey:
             - "kms:GenerateDataKeyWithoutPlaintext"
           Effect: Allow
           Principal: 
-            AWS: "arn:aws:iam::412164052405:user/kmsuser"
+            AWS: "arn:aws:iam::xxxxxxxxx:user/kmsuser"
             Resources: "*"
           Sid: "Allow use of the key"
       Version: "2012-10-17"

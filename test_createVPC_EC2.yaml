@@ -15,7 +15,7 @@ Parameters:
   KeyName:
     Description: EC2 Key Pair for SSH Access
     Type: String
-    Default: Datalake_keypair
+    Default: xxxxxxxxxxx
     MinLength: '1'
     MaxLength: '64'
     AllowedPattern: "[-_ a-zA-Z0-9]*"
