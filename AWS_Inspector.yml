@@ -1,0 +1,21 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This Template sets up an AWS Inspector service for the datalake solution.
+
+Resources: 
+
+    ###AWS Inspector Resource Template###
+    Datalakeassessmenttemplate:
+        Type: AWS::Inspector::AssessmentTemplate
+        Properties:
+            AssessmentTargetArn: "arn:aws:inspector:us-east-1:412164052405:target/0-8njuuuPK"
+            AssessmentTemplateName: DatalakeAssessmentTemplate
+            DurationInSeconds: 3600
+            RulesPackageArns:
+                - "arn:aws:inspector:us-east-1:316112463485:rulespackage/0-gEjTy7T7"
+                - "arn:aws:inspector:us-east-1:316112463485:rulespackage/0-rExsr2X8"
+                - "arn:aws:inspector:us-east-1:316112463485:rulespackage/0-PmNV0Tcd"
+                - "arn:aws:inspector:us-east-1:316112463485:rulespackage/0-R01qwB5Q"
+            UserAttributesForFindings:
+                - 
+                    Key: Example
+                    Value: example
