@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  This template sets up sample AWS Glue resources to be orchestrated by AWS Step Functions.
+Parameters:
+
+  DatalakeDatabaseName:
+    Type: String
+    MinLength: "4"
+    Default: "datalake_qs"
+    Description: "Name of the AWS Glue database to contain this CloudFormation template's tables."
+
+  EC2LogTableName:
+    Type: String
+    MinLength: "4"
+    Default: "ec2log_qs"
+    Description: "Name of the source data table in AWS Glue."
+
+  CloudwatchLogTableName:
+    Type: String
+    MinLength: "4"
+    Default: "cloudwatch_qs"
+    Description: "Name of the source data table in AWS Glue."
+
+  ETLScriptsPrefix:
+    Type: String
+    MinLength: "1"
+    Description: "Location of the Glue job ETL scripts in S3."
+
+  ETLOutputPrefix:
+    Type: String
+    MinLength: "1"
+    Description: "Name of the S3 output path to which this CloudFormation template's AWS Glue jobs are going to write ETL output."
+
+  DataBucketName:
+    Type: String
+    MinLength: "1"
+    Description: "Name of the S3 bucket in which the source EC2 and Cloudwatch data will be present. Bucket is created by this CFT."
+
+  ArtifactBucketName:
+    Type: String
+    MinLength: "1"
+    Description: "Name of the S3 bucket in which the EC2Log and CloudwatchLog ETL scripts reside. Bucket is NOT created by this CFT."
+
+Resources:
+
+  ### AWS GLUE RESOURCES ###
+  AWSGlueJobRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:ListBucket"
+                  - "s3:DeleteObject"
+                Resource:
+                  - !Sub "arn:aws:s3:::${DataBucketName}"
+                  - !Sub "arn:aws:s3:::${DataBucketName}/*"
+                  - !Sub "arn:aws:s3:::${ArtifactBucketName}"
+                  - !Sub "arn:aws:s3:::${ArtifactBucketName}/*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+      Path: "/"
+
+
+  DatalakeDatabase:
+    Type: "AWS::Glue::Database"
+    Properties:
+      DatabaseInput:
+        Description: "EC2Log and CloudwatchLog database."
+        Name: !Ref DatalakeDatabaseName
+      CatalogId: !Ref AWS::AccountId
+
+  EC2LogTable:
+    Type: "AWS::Glue::Table"
+    DependsOn: DatalakeDatabase
+    Properties:
+      TableInput:
+        Description: "EC2Log table."
+        TableType: "EXTERNAL_TABLE"
+        Parameters: {
+                "CrawlerSchemaDeserializerVersion": "1.0",
+                "compressionType": "none",
+                "classification": "csv",
+                "recordCount": "16831",
+                "typeOfData": "file",
+                "CrawlerSchemaSerializerVersion": "1.0",
+                "columnsOrdered": "true",
+                "objectCount": "1",
+                "delimiter": ",",
+                "skip.header.line.count": "1",
+                "averageRecordSize": "119",
+                "sizeKey": "2002910"
+        }
+        StorageDescriptor:
+          StoredAsSubDirectories: False
+          Parameters: {
+                  "CrawlerSchemaDeserializerVersion": "1.0",
+                  "compressionType": "none",
+                  "classification": "csv",
+                  "recordCount": "16831",
+                  "typeOfData": "file",
+                  "CrawlerSchemaSerializerVersion": "1.0",
+                  "columnsOrdered": "true",
+                  "objectCount": "1",
+                  "delimiter": ",",
+                  "skip.header.line.count": "1",
+                  "averageRecordSize": "119",
+                  "sizeKey": "2002910"
+          }
+          InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
+          OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+          Columns:
+            - Type: string
+              Name: date
+            - Type: string
+              Name: EC2 server
+            - Type: string
+              Name: logpath
+            - Type: string
+              Name: logsource
+   
+          SerdeInfo:
+            Parameters: {
+                        "field.delim": ","
+            }
+            SerializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+          Compressed: False
+          Location: !Sub "s3://${DataBucketName}/logs/"
+        Retention: 0
+        Name: !Ref EC2LogTableName
+      DatabaseName: !Ref DatalakeDatabaseName
+      CatalogId: !Ref AWS::AccountId
+
+  CloudwatchLogTable:
+    Type: "AWS::Glue::Table"
+    DependsOn: DatalakeDatabase
+    Properties:
+      TableInput:
+        Description: "CloudwatchLog table."
+        TableType: "EXTERNAL_TABLE"
+        Parameters: {
+                    "CrawlerSchemaDeserializerVersion": "1.0",
+                    "compressionType": "none",
+                    "classification": "csv",
+                    "recordCount": "948",
+                    "typeOfData": "file",
+                    "CrawlerSchemaSerializerVersion": "1.0",
+                    "columnsOrdered": "true",
+                    "objectCount": "1",
+                    "delimiter": ",",
+                    "skip.header.line.count": "1",
+                    "averageRecordSize": "160",
+                    "sizeKey": "151746"
+        }
+        StorageDescriptor:
+          StoredAsSubDirectories: False
+          Parameters: {
+                    "CrawlerSchemaDeserializerVersion": "1.0",
+                    "compressionType": "none",
+                    "classification": "csv",
+                    "recordCount": "948",
+                    "typeOfData": "file",
+                    "CrawlerSchemaSerializerVersion": "1.0",
+                    "columnsOrdered": "true",
+                    "objectCount": "1",
+                    "delimiter": ",",
+                    "skip.header.line.count": "1",
+                    "averageRecordSize": "160",
+                    "sizeKey": "151746"
+          }
+          InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
+          OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+          Columns:
+            - Type: string
+              Name: date
+            - Type: string
+              Name: cloudwatch loggroup
+            - Type: string
+              Name: logpath
+            - Type: string
+              Name: logsource
+            
+          SerdeInfo:
+            Parameters: {
+                        "field.delim": ","
+            }
+            SerializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+          Compressed: False
+          Location: !Sub "s3://${DataBucketName}/logs/"
+        Retention: 0
+        Name: !Ref CloudwatchLogTableName
+      DatabaseName: !Ref DatalakeDatabaseName
+      CatalogId: !Ref AWS::AccountId
+
+  ProcessEC2LogDataJob:
+    Type: "AWS::Glue::Job"
+    Properties:
+      Role: !Ref AWSGlueJobRole
+      Name: "ProcessEC2LogData"
+      Command: {
+        "Name" : "glueetl",
+        "ScriptLocation": !Sub "s3://${ArtifactBucketName}/${ETLScriptsPrefix}/process_EC2Log_data.py"
+      }
+      DefaultArguments: {
+          "--database_name" : !Ref DatalakeDatabaseName,
+          "--table_name" : !Ref EC2LogTableName,
+          "--s3_output_path": !Sub "s3://${DataBucketName}/${ETLOutputPrefix}/tmp/ec2_output"
+      }
+      MaxRetries: 0
+      Description: "Process EC2Log data."
+      AllocatedCapacity: 5
+
+  ProcessCloudwatchLogDataJob:
+    Type: "AWS::Glue::Job"
+    Properties:
+      Role: !Ref AWSGlueJobRole
+      Name: "ProcessCloudwatchLogData"
+      Command: {
+        "Name" : "glueetl",
+        "ScriptLocation": !Sub "s3://${ArtifactBucketName}/${ETLScriptsPrefix}/process_CloudwatchLog_data.py"
+      }
+      DefaultArguments: {
+          "--database_name" : !Ref DatalakeDatabase,
+          "--table_name" : !Ref CloudwatchLogTableName,
+          "--s3_output_path": !Sub "s3://${DataBucketName}/${ETLOutputPrefix}/tmp/cloudwatch_output"
+      }
+      MaxRetries: 0
+      Description: "Process CloudwatchLog data."
+      AllocatedCapacity: 5
+
+  JoinEC2LogAndCloudwatchLogDataJob:
+    Type: "AWS::Glue::Job"
+    Properties:
+      Role: !Ref AWSGlueJobRole
+      Name: "JoinEC2LogAndCloudwatchLogData"
+      Command: {
+        "Name" : "glueetl",
+        "ScriptLocation": !Sub "s3://${ArtifactBucketName}/${ETLScriptsPrefix}/join_EC2Log_and_CloudwatchLog_data.py"
+      }
+      DefaultArguments: {
+        "--database_name": !Ref DatalakeDatabase,
+        "--s3_output_path": !Sub "s3://${DataBucketName}/${ETLOutputPrefix}/EC2-and-Cloudwatch",
+        "--s3_ec2_data_path": !Sub "s3://${DataBucketName}/${ETLOutputPrefix}/tmp/ec2_output",
+        "--s3_cloudwatch_data_path": !Sub "s3://${DataBucketName}/${ETLOutputPrefix}/tmp/cloudwatch_output"
+      }
+      MaxRetries: 0
+      Description: "Join CloudwatchLog and EC2Log data."
+      AllocatedCapacity: 5
