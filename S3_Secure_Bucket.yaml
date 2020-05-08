@@ -1,11 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Creating S3 Bucket for Datalake solution
+Description: Creating S3 Secure Bucket for Datalake solution
 
 Resources: 
-  DatalakeS3bucket:
+  DatalakeS3SecureBucket:
     Type: "AWS::S3::Bucket"
+    DeletionPolicy: Retain
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
         - ServerSideEncryptionByDefault:
             SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled		
