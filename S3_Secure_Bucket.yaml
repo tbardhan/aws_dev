@@ -11,4 +11,10 @@ Resources:
         - ServerSideEncryptionByDefault:
             SSEAlgorithm: AES256
       VersioningConfiguration:
-        Status: Enabled		
+        Status: Enabled	
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      
