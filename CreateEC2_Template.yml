@@ -1,0 +1,437 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Create VPC, 2 Private, 2 Public Subnets, NAT Gateway & InternetGateway
+Parameters:
+  TagValue1:
+    Description: MyVPC with 2 Private, 2 Public Subnets, NAT Gateway & InternetGateway
+    Type: String
+  TagValue2:
+    Description: The Name of Environment
+    Type: String
+    AllowedValues:
+    - DEV
+    - QA
+    - PROD
+  KeyName:
+    Description: EC2 Key Pair for SSH Access
+    Type: String
+    Default: Datalake_keypair
+    MinLength: '1'
+    MaxLength: '64'
+    AllowedPattern: "[-_ a-zA-Z0-9]*"
+    ConstraintDescription: can contain only alphanumeric characters, spaces, dashes
+      and underscores.
+      
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})"
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    
+  InstanceType:
+    Description: Datalake EC2 instance type
+    Type: String
+    Default: t1.micro
+    ConstraintDescription: must be a valid EC2 instance type.
+ 
+  VPCName:
+    Description: The Name of your VPC
+    Type: String
+  CIDR:
+    Description: The IP address range that you'll use for your VPC
+    Type: String
+  PublicSubnet1AZName:
+    Description: Name in AZ for Public Subnet 1
+    Type: String
+  PublicCidrBlock1:
+    Description: The IP address range for Public Subnet 1
+    Type: String
+  PublicSubnet1AZ:
+    Description: The AZ for Public Subnet 1
+    Type: AWS::EC2::AvailabilityZone::Name
+  PublicSubnet2AZName:
+    Description: Name in AZ for Public Subnet 2
+    Type: String
+  PublicCidrBlock2:
+    Description: The IP address range for Public Subnet 2
+    Type: String
+  PublicSubnet2AZ:
+    Description: The AZ for Public Subnet 2
+    Type: AWS::EC2::AvailabilityZone::Name
+  PrivateSubnet1AZName:
+    Description: Name in AZ for Private Subnet 1
+    Type: String
+  PrivateCidrBlock1:
+    Description: The IP address range for Private Subnet 1
+    Type: String
+  PrivateSubnet1AZ:
+    Description: The AZ for Private Subnet 1
+    Type: AWS::EC2::AvailabilityZone::Name
+  PrivateSubnet2AZName:
+    Description: Name in AZ for Private Subnet 2
+    Type: String
+  PrivateCidrBlock2:
+    Description: The IP address range for Private Subnet 2
+    Type: String
+  PrivateSubnet2AZ:
+    Description: The AZ Private Subnet 2
+    Type: AWS::EC2::AvailabilityZone::Name
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock:
+        Ref: CIDR
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value:
+          Ref: VPCName
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PublicCidrBlock1
+      MapPublicIpOnLaunch: 'true'
+      AvailabilityZone:
+        Ref: PublicSubnet1AZ
+      Tags:
+      - Key: Name
+        Value:
+          Ref: PublicSubnet1AZName
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PublicCidrBlock2
+      MapPublicIpOnLaunch: 'true'
+      AvailabilityZone:
+        Ref: PublicSubnet2AZ
+      Tags:
+      - Key: Name
+        Value:
+          Ref: PublicSubnet2AZName
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+      - Key: Name
+        Value: igw-PubicSubnetAZ1
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: VPC
+      InternetGatewayId:
+        Ref: InternetGateway
+  NAT:
+    DependsOn: AttachGateway
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+        - EIP
+        - AllocationId
+      SubnetId:
+        Ref: PublicSubnet1
+  EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc     
+  
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: VPC-public-route
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+      - Key: Network
+        Value: Public
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId:
+        Ref: PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: InternetGateway
+  PublicSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      RouteTableId:
+        Ref: PublicRouteTable
+  PublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet2
+      RouteTableId:
+        Ref: PublicRouteTable
+  PublicNetworkAcl:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: PublicNetworkACL
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+      - Key: Network
+        Value: Public
+  PublicSubnetNetworkAclAssociation1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet1
+      NetworkAclId:
+        Ref: PublicNetworkAcl
+  PublicSubnetNetworkAclAssociation2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PublicSubnet2
+      NetworkAclId:
+        Ref: PublicNetworkAcl
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateCidrBlock1
+      AvailabilityZone:
+        Ref: PrivateSubnet1AZ
+      Tags:
+      - Key: Name
+        Value:
+          Ref: PrivateSubnet1AZName
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: VPC
+      CidrBlock:
+        Ref: PrivateCidrBlock2
+      AvailabilityZone:
+        Ref: PrivateSubnet2AZ
+      Tags:
+      - Key: Name
+        Value:
+          Ref: PrivateSubnet2AZName
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: VPC-private-route
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+      - Key: Network
+        Value: Private
+  PrivateSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1
+      RouteTableId:
+        Ref: PrivateRouteTable
+  PrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2
+      RouteTableId:
+        Ref: PrivateRouteTable
+  PrivateNATRouteTableAssociation:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: NAT
+  PrivateNetworkAcl:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId:
+        Ref: VPC
+      Tags:
+      - Key: Name
+        Value: PrivateNetworkACL
+      - Key: Project
+        Value:
+          Ref: TagValue1
+      - Key: Environment
+        Value:
+          Ref: TagValue2
+      - Key: Network
+        Value: Private
+  PrivateSubnetNetworkAclAssociation1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet1
+      NetworkAclId:
+        Ref: PrivateNetworkAcl
+  PrivateSubnetNetworkAclAssociation2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivateSubnet2
+      NetworkAclId:
+        Ref: PrivateNetworkAcl
+  NetworkAclEntry1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: 'true'
+      Protocol: "-1"
+      RuleAction: allow
+      RuleNumber: '100'
+      NetworkAclId:
+        Ref: PublicNetworkAcl
+  NetworkAclEntry2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: "-1"
+      RuleAction: allow
+      RuleNumber: '100'
+      NetworkAclId:
+        Ref: PublicNetworkAcl
+  NetworkAclEntry3:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: 'true'
+      Protocol: "-1"
+      RuleAction: allow
+      RuleNumber: '100'
+      NetworkAclId:
+        Ref: PrivateNetworkAcl
+  NetworkAclEntry4:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Protocol: "-1"
+      RuleAction: allow
+      RuleNumber: '100'
+      NetworkAclId:
+        Ref: PrivateNetworkAcl
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP access via port 80 and SSH access via port 22
+      VpcId:
+        Ref: VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp:
+          Ref: SSHLocation
+ 
+   
+  Instance:
+      Type: AWS::EC2::Instance
+      Properties:
+        KeyName: Datalake_keypair
+        InstanceType:
+          Ref: InstanceType
+        ImageId: ami-0ff8a91507f77f867
+        SubnetId: 
+          Ref: PublicSubnet1
+        SecurityGroups:
+          Ref: SecurityGroup		
+Outputs:
+  VPCId:
+    Description: VPCId of the newly created VPC
+    Value:
+      Ref: VPC
+  PublicSubnet1Id:
+    Description: SubnetId of the public subnet
+    Value:
+      Ref: PublicSubnet1
+  PublicSubnet2Id:
+    Description: SubnetId of the public subnet
+    Value:
+      Ref: PublicSubnet2
+  PrivateSubnet1Id:
+    Description: SubnetId of the public subnet
+    Value:
+      Ref: PrivateSubnet1
+  PrivateSubnet2Id:
+    Description: SubnetId of the public subnet
+    Value:
+      Ref: PrivateSubnet2
