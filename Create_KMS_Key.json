@@ -12,7 +12,7 @@
               "Sid": "Allow administration of the key",
               "Effect": "Allow",
               "Principal": {
-                "AWS": "arn:aws:iam::412164052405:user/jchirayathADMIN"
+                "AWS": "arn:aws:iam::XXXXXXXXXXX:root"
               },
               "Action": [
                 "kms:Create*",
@@ -34,7 +34,7 @@
               "Sid": "Allow use of the key",
               "Effect": "Allow",
               "Principal": {
-                "AWS": "arn:aws:iam::412164052405:user/kmsuser"
+                "AWS": "arn:aws:iam::XXXXXXXXXXXX:user/jchirayathADMIN"
               },
               "Action": [
                 "kms:Encrypt",
