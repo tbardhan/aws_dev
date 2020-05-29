@@ -1,0 +1,51 @@
+
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create customer managed CMK KMS keys"
+Outputs:
+  S3KmsKeyId:
+    Description: "The KMS Key used"
+    Export:
+      Name: S3KmsKeyId
+    Value: DWKMSKey
+Resources:
+  DWKMSKey:
+    Properties:
+      Description: "Datawarehouse key"
+      EnableKeyRotation: "True"
+      KeyPolicy:
+        Id: key-default-1
+        Statement:
+          -
+            Action:
+              - "kms:Create*"
+              - "kms:Describe*"
+              - "kms:Enable*"
+              - "kms:List*"
+              - "kms:Put*"
+              - "kms:Update*"
+              - "kms:Revoke*"
+              - "kms:Disable*"
+              - "kms:Get*"
+              - "kms:Delete*"
+              - "kms:ScheduleKeyDeletion"
+              - "kms:CancelKeyDeletion"
+            Effect: Allow
+            Principal:
+              AWS: "arn:aws:iam::xxxxxxxxxxx:root"
+            Resource: "*"
+            Sid: "Allow administration of the key"
+          -
+            Action:
+              - "kms:Encrypt"
+              - "kms:Decrypt"
+              - "kms:ReEncrypt"
+              - "kms:GenerateDataKey*"
+              - "kms:DescribeKey"
+            Effect: Allow
+            Principal:
+              AWS: "arn:aws:iam::xxxxxxxxxxx:user/USER"
+            Resource: "*"
+            Sid: "Allow use of the key"
+        Version: "2012-10-17"
+    Type: "AWS::KMS::Key"
