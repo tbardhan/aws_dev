@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create customer managed CMK KMS keys
+Parameters:
+  AdministratorsRole:
+    Description: The parameter holds name of AWS Administrators Group
+    Type: String
+  KMSKeyAccessRole:
+    Description: The parameter holds name of AWS KMS Key Access Group
+    Type: String
+Resources:
+  DWKMSKey:
+    Properties:
+      Description: Datawarehouse KMS Key
+      EnableKeyRotation: true
+      Enabled: true
+      KeyPolicy:
+        Id: key-default-1
+        Statement:
+          - Action:
+              - 'kms:*'
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':root'
+            Resource: '*'
+            Sid: Enable IAM User Permissions
+          - Action:
+              - 'kms:Create*'
+              - 'kms:Describe*'
+              - 'kms:Enable*'
+              - 'kms:List*'
+              - 'kms:Put*'
+              - 'kms:Update*'
+              - 'kms:Revoke*'
+              - 'kms:Disable*'
+              - 'kms:Get*'
+              - 'kms:Delete*'
+              - 'kms:ScheduleKeyDeletion'
+              - 'kms:CancelKeyDeletion'
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':role/'
+                    - !Ref AdministratorsRole
+            Resource: '*'
+            Sid: Allow administration of the key
+          - Sid: Allow use of the key
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':role/'
+                    - !Ref KMSKeyAccessRole
+            Action:
+              - 'kms:DescribeKey'
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey'
+              - 'kms:GenerateDataKeyWithoutPlaintext'
+            Resource: '*'
+        Version: 2012-10-17
+    Type: 'AWS::KMS::Key'
+Outputs:
+  KmsKeyId:
+    Description: The KMS Key used
+    Export:
+      Name: !Sub '${AWS::StackName}-KmsKeyId'
+    Value: !Ref DWKMSKey
+  KmsKeyArn:
+    Description: The KMS Key Arn
+    Value: !GetAtt [DWKMSKey, Arn]
+    Export:
+      Name: !Sub '${AWS::StackName}-KmsKeyArn'

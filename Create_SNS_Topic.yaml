@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create SNS Topic for DW Solution
+Parameters:
+  KMSStackName:
+    Type: String
+Resources:
+  DataWarehouseTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      KmsMasterKeyId: !ImportValue 
+        'Fn::Sub': '${KMSStackName}-KmsKeyId'
+Outputs:
+  TopicName:
+    Description: Returns Name of the SNSTopic
+    Export:
+      Name: !Sub '${AWS::StackName}-TopicName'
+    Value: !Ref DataWarehouseTopic

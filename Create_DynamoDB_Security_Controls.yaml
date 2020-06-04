@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: 2010-09-09
+Parameters:
+  PrimaryKey:
+    Description: This holds the Primary Key
+    Type: String
+  SortKey:
+    Description: This holds the Composite Primary Key
+    Type: String
+  ReadCapacityUnits:
+    Description: >-
+      The maximum number of strongly consistent reads consumed per second before
+      DynamoDB returns a ThrottlingException.
+    Type: String
+  WriteCapacityUnits:
+    Description: >-
+      The maximum number of writes consumed per second before DynamoDB returns a
+      ThrottlingException.
+    Type: String
+  DatalakeTableName:
+    Description: The name of the DynamoDB table.
+    Type: String
+  StreamSpecification:
+    Description: The settings used to enable point in time recovery.
+    Type: String
+  KMSStackName:
+    Type: String
+  SSEType:
+    Description: Server-side encryption type
+    Type: String
+Resources:
+  DatalakeDynamoDBTable:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: !Ref DatalakeTableName
+      AttributeDefinitions:
+        - AttributeName: !Ref PrimaryKey
+          AttributeType: S
+        - AttributeName: !Ref SortKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: !Ref PrimaryKey
+          KeyType: HASH
+        - AttributeName: !Ref SortKey
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: !Ref ReadCapacityUnits
+        WriteCapacityUnits: !Ref WriteCapacityUnits
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      StreamSpecification:
+        StreamViewType: !Ref StreamSpecification
+      SSESpecification:
+        KMSMasterKeyId: !ImportValue 
+          'Fn::Sub': '${KMSStackName}-KmsKeyId'
+        SSEEnabled: true
+        SSEType: !Ref SSEType
+Outputs:
+  DynamoDBTableName:
+    Value: !Ref DatalakeDynamoDBTable
+    Description: Returns DyanamoDB table name.
+  Arn:
+    Value: !GetAtt 
+      - DatalakeDynamoDBTable
+      - Arn
+    Description: DynamoDB ARN
+  StreamArn:
+    Value: !GetAtt 
+      - DatalakeDynamoDBTable
+      - StreamArn
+    Description: DynamoDB ARN
