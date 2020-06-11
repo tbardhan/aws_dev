@@ -1,0 +1,172 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  Enable AWS CloudTrail. This template creates a CloudTrail trail, an Amazon S3
+  bucket where logs are published, and an Amazon SNS topic where notifications
+  are sent.
+Parameters:
+  KMSStackName:
+    Type: String
+    Description: This is a KMS Key Stack name
+Resources:
+  TrailBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: !ImportValue 
+                'Fn::Sub': '${KMSStackName}-KmsKeyArn'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  TrailBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref TrailBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AWSTrailBucketPermissionsCheck
+            Effect: Allow
+            Principal:
+              Service:
+                - cloudtrail.amazonaws.com
+            Action: 's3:GetBucketAcl'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref TrailBucket
+          - Sid: AWSTrailBucketDelivery
+            Effect: Allow
+            Principal:
+              Service:
+                - cloudtrail.amazonaws.com
+            Action: 's3:PutObject'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref TrailBucket
+                  - /AWSLogs/
+                  - !Ref 'AWS::AccountId'
+                  - /*
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': bucket-owner-full-control
+  TrailIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - cloudtrail.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: CloudTrail-To-CloudWatch-Log-Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                  - 'kms:*'
+                Resource:
+                  - !Join 
+                    - ''
+                    - - 'arn:aws:logs:*:'
+                      - !Ref 'AWS::AccountId'
+                      - ':log-group:'
+                      - !Ref TrailLogGroup
+                      - ':log-stream:'
+                      - !Ref 'AWS::AccountId'
+                      - _CloudTrail*
+      Description: This IAM role is associated with Data Warehouse CloudTrail
+      Path: /
+      Tags:
+        - Key: Tag1
+          Value: DWCloudTrailIAMRole
+  TrailLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      RetentionInDays: 7
+  Trail:
+    DependsOn:
+      - TrailBucketPolicy
+    Type: 'AWS::CloudTrail::Trail'
+    Properties:
+      CloudWatchLogsLogGroupArn: !GetAtt 
+        - TrailLogGroup
+        - Arn
+      CloudWatchLogsRoleArn: !GetAtt 
+        - TrailIAMRole
+        - Arn
+      S3BucketName: !Ref TrailBucket
+      IsLogging: true
+      EnableLogFileValidation: true
+      IncludeGlobalServiceEvents: true
+      IsMultiRegionTrail: true
+      KMSKeyId: !ImportValue 
+        'Fn::Sub': '${KMSStackName}-KmsKeyArn'
+Outputs:
+  TrailBucketName:
+    Description: This output parameter holds the cloud trail bucket name
+    Value: !Ref TrailBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-TrailBucketName'
+  TrailBucketSecureUrl:
+    Description: This output parameter holds the secure url for cloud trail s3 bucket
+    Value: !Join 
+      - ''
+      - - 'https://'
+        - !GetAtt 
+          - TrailBucket
+          - DomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-TrailBucketSecureUrl'
+  TrailBucketUrl:
+    Description: This output parameter holds the cloud trail s3 bucket url
+    Value: !GetAtt 
+      - TrailBucket
+      - WebsiteURL
+    Export:
+      Name: !Sub '${AWS::StackName}-TrailBucketUrl'
+  TrailIAMRole:
+    Description: This output parameter holds the cloud trail IAM role
+    Value: !Ref TrailIAMRole
+    Export:
+      Name: !Sub '${AWS::StackName}-TrailIAMRole'
+  TrailIAMRoleArn:
+    Description: This output parameter holds the cloud trail IAM role arn
+    Value: !GetAtt 
+      - TrailIAMRole
+      - Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TrailIAMRoleArn'
+  TrailLogGroup:
+    Description: This output parameter holds the cloud trail log group name
+    Value: !Ref TrailLogGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-TrailLogGroup'
+  TrailLogGroupArn:
+    Description: This output parameter holds the cloud trail log group arn
+    Value: !GetAtt 
+      - TrailLogGroup
+      - Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-TrailLogGroupArn'
+  Trail:
+    Description: This output parameter holds the cloud trail
+    Value: !Ref Trail
+    Export:
+      Name: !Sub '${AWS::StackName}-Trail'

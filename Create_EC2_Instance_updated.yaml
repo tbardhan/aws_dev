@@ -1,0 +1,236 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create EC2 Instance CloudFormation Template
+Parameters:
+  TagValue1:
+    Description: EC2 instance with SSM and Inspector Agents
+    Type: String
+  TagValue2:
+    Description: Environment
+    Type: String
+  VpcId:
+    Description: The id of your VPC
+    Type: String
+  PublicSubnet:
+    Description: Public Subnet for EC2 instance
+    Type: String
+  PrivateSubnet:
+    Description: Private Subnet for EC2 instance
+    Type: String
+  KeyName:
+    Description: SSH Key Name to us for EC2 instance
+    Type: String
+  EC2IAMRoleStackName:
+    Description: SSH Key Name to us for EC2 instance
+    Type: String
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - t3.nano
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - g3.8xlarge
+      - r5.large
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r3.12xlarge
+      - i3.xlarge
+      - i3.2xlarge
+      - i3.4xlarge
+      - i3.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  SSHLocation:
+    Description: The IP address range that can be used to SSH to the EC2 instances
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 38.101.193.128/27
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+  TagValuePublicInstance:
+    Type: String
+  TagValuePrivateInstance:
+    Type: String
+Mappings:
+  RegionMap:
+    us-east-1:
+      HVM64: ami-0ff8a91507f77f867
+      HVMG2: ami-0a584ac55a7631c0c
+    us-west-1:
+      HVM64: ami-0bdb828fd58c52235
+      HVMG2: ami-066ee5fd4a9ef77f1
+    eu-west-1:
+      HVM64: ami-047bb4163c506cd98
+      HVMG2: ami-31c2f645
+    ap-southeast-1:
+      HVM64: ami-08569b978cc4dfa10
+      HVMG2: ami-0be9df32ae9f92309
+    ap-northeast-1:
+      HVM64: ami-06cd52961ce9f0d85
+      HVMG2: ami-053cdd503598e4a9d
+Resources:
+  EC2InstancePublic:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref TagValuePublicInstance
+      InstanceType: t2.micro
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      IamInstanceProfile: !ImportValue 
+        'Fn::Sub': '${EC2IAMRoleStackName}-DWEC2LaunchGroupInstanceProfile'
+      KeyName: !Ref KeyName
+      SubnetId: !Ref PublicSubnet
+      ImageId: !FindInMap 
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - HVM64
+      UserData: !Base64 
+        'Fn::Sub': >
+          #!/bin/bash -ex
+
+          yum update
+
+          yum install -y httpd;
+
+          echo "<html> My DataWarehouse Web Server!!</html>" >
+          /var/www/html/index.html;
+
+          cd /var/www/html;
+
+          chmod 755 index.html;
+
+          service httpd start;
+
+          chkconfig httpd on;
+
+          curl -O https://inspector-agent.amazonaws.com/linux/latest/install;
+
+          bash install -u;
+  EC2InstancePrivate:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref TagValuePrivateInstance
+      InstanceType: t2.micro
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      IamInstanceProfile: !ImportValue 
+        'Fn::Sub': '${EC2IAMRoleStackName}-DWEC2LaunchGroupInstanceProfile'
+      KeyName: !Ref KeyName
+      SubnetId: !Ref PrivateSubnet
+      ImageId: !FindInMap 
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - HVM64
+      UserData: !Base64 
+        'Fn::Sub': >
+          #!/bin/bash -ex
+
+          yum update
+
+          yum install -y httpd;
+
+          echo "<html> My DataWarehouse Web Server!!</html>" >
+          /var/www/html/index.html;
+
+          cd /var/www/html;
+
+          chmod 755 index.html;
+
+          service httpd start;
+
+          chkconfig httpd on;
+
+          curl -O https://inspector-agent.amazonaws.com/linux/latest/install;
+
+          bash install -u;
+  EC2SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: DataWarehouse Security Group
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '443'
+          ToPort: '443'
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref SSHLocation
+Outputs:
+  InstanceIdPrivate:
+    Description: InstanceId of the newly created PRIVATE EC2 instance
+    Value: !Ref EC2InstancePrivate
+  AZPrivate:
+    Description: Availability Zone of the newly created PRIVATE EC2 instance
+    Value: !GetAtt 
+      - EC2InstancePrivate
+      - AvailabilityZone
+  PrivateEC2PrivateDnsName:
+    Description: Private DNSName of the newly created PRIVATE EC2 instance
+    Value: !GetAtt 
+      - EC2InstancePrivate
+      - PrivateDnsName
+  PrivateEC2PrivateIp:
+    Description: Private IP address of the newly created PRIVATE EC2 instance
+    Value: !GetAtt 
+      - EC2InstancePrivate
+      - PrivateIp
+  InstanceIdPublic:
+    Description: InstanceId of the newly created PUBLIC EC2 instance
+    Value: !Ref EC2InstancePublic
+  AZPublic:
+    Description: Availability Zone of the newly created PUBLIC EC2 instance
+    Value: !GetAtt 
+      - EC2InstancePublic
+      - AvailabilityZone
+  TagValuePrivateInstance:
+    Description: >-
+      TagValue for the EC2 private server which will be used in Inspector
+      Template
+    Value: !Ref TagValuePrivateInstance
+    Export:
+      Name: !Sub '${AWS::StackName}-TagValuePrivateInstance'
+  TagValuePublicInstance:
+    Description: TagValue for EC2 public server which will be used in Inspector Template
+    Value: !Ref TagValuePublicInstance
+    Export:
+      Name: !Sub '${AWS::StackName}-TagValuePublicInstance'

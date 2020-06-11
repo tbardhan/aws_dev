@@ -1,0 +1,119 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Creating S3 Secure Bucket for Datalake solution
+Resources:
+  DatalakeS3SecureBucket:
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  DatalakeS3SecureBucketBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref DatalakeS3SecureBucket
+      PolicyDocument:
+        Statement:
+          - Sid: !Ref DatalakeS3SecureBucket
+            Action: 's3:GetBucketAcl'
+            Effect: Allow
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref DatalakeS3SecureBucket
+            Principal:
+              Service:
+                - !Join 
+                  - ''
+                  - - logs.
+                    - !Ref 'AWS::Region'
+                    - .amazonaws.com
+          - Sid: !Ref DatalakeS3SecureBucket
+            Action: 's3:PutObject'
+            Effect: Allow
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref DatalakeS3SecureBucket
+                  - /*
+            Condition:
+              StringEquals:
+                's3:x-amz-acl': bucket-owner-full-control
+            Principal:
+              Service:
+                - !Join 
+                  - ''
+                  - - logs.
+                    - !Ref 'AWS::Region'
+                    - .amazonaws.com
+          - Sid: lab-admin-access
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':role/LabAWSAdmin'
+            Action: 's3:*'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref DatalakeS3SecureBucket
+                  - /*
+          - Sid: glue-access
+            Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: 's3:*'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref DatalakeS3SecureBucket
+                  - /*
+          - Sid: S3 Bucket policy for private instance
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 's3:PutObject'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref DatalakeS3SecureBucket
+                  - /*
+Outputs:
+  BucketName:
+    Value: !Ref DatalakeS3SecureBucket
+    Description: Name of the sample Amazon S3 bucket with a lifecycle configuration.
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketName'
+  WebsiteURL:
+    Value: !GetAtt 
+      - DatalakeS3SecureBucket
+      - WebsiteURL
+    Description: URL for website hosted on S3
+    Export:
+      Name: !Sub '${AWS::StackName}-WebsiteURL'
+  S3BucketSecureURL:
+    Value: !Join 
+      - ''
+      - - 'https://'
+        - !GetAtt 
+          - DatalakeS3SecureBucket
+          - DomainName
+    Description: Name of S3 bucket to hold website content
+    Export:
+      Name: !Sub '${AWS::StackName}-S3BucketSecureURL'

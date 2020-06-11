@@ -1,5 +1,9 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: Creating S3 Secure Bucket for Datalake solution
+Parameters:
+  KMSStackName:
+    Description: This parameter holds the KMS Key Stack Name
+    Type: String
 Resources:
   DatalakeS3SecureBucket:
     Type: 'AWS::S3::Bucket'
@@ -8,7 +12,9 @@ Resources:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: !ImportValue 
+                'Fn::Sub': '${KMSStackName}-KmsKeyArn'
       VersioningConfiguration:
         Status: Enabled
       PublicAccessBlockConfiguration:
@@ -45,7 +51,7 @@ Resources:
                 - ''
                 - - 'arn:aws:s3:::'
                   - !Ref DatalakeS3SecureBucket
-                  - /AWSCloudWatchLogs/*
+                  - /*
             Condition:
               StringEquals:
                 's3:x-amz-acl': bucket-owner-full-control
@@ -56,19 +62,64 @@ Resources:
                   - - logs.
                     - !Ref 'AWS::Region'
                     - .amazonaws.com
+          - Sid: lab-admin-access
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':role/LabAWSAdmin'
+            Action: 's3:*'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref DatalakeS3SecureBucket
+                  - /*
+          - Sid: glue-access
+            Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: 's3:*'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref DatalakeS3SecureBucket
+                  - /*
+          - Sid: S3 Bucket policy for private instance
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 's3:PutObject'
+            Resource:
+              - !Join 
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref DatalakeS3SecureBucket
+                  - /*
 Outputs:
   BucketName:
-    Value: !Ref 'DatalakeS3SecureBucket'
+    Value: !Ref DatalakeS3SecureBucket
     Description: Name of the sample Amazon S3 bucket with a lifecycle configuration.
     Export:
       Name: !Sub '${AWS::StackName}-BucketName'
   WebsiteURL:
-    Value: !GetAtt [DatalakeS3SecureBucket, WebsiteURL]
+    Value: !GetAtt 
+      - DatalakeS3SecureBucket
+      - WebsiteURL
     Description: URL for website hosted on S3
     Export:
       Name: !Sub '${AWS::StackName}-WebsiteURL'
   S3BucketSecureURL:
-    Value: !Join ['', ['https://', !GetAtt [DatalakeS3SecureBucket, DomainName]]]
+    Value: !Join 
+      - ''
+      - - 'https://'
+        - !GetAtt 
+          - DatalakeS3SecureBucket
+          - DomainName
     Description: Name of S3 bucket to hold website content
     Export:
       Name: !Sub '${AWS::StackName}-S3BucketSecureURL'

@@ -1,0 +1,272 @@
+Description: AWS Glue S3 ingestion bucket transformation to s3 prepared bucket
+Parameters:
+  KMSStackName:
+    Description: This parameter holds KMS Key generated stack name
+    Type: String
+  S3IngestionBucketStackName:
+    Description: This parameter holds Dynamo Database Stack Name
+    Type: String
+  S3IngestionBucketDDBExportResultPath:
+    Description: This parameter holds Dynamo Database result in S3 ingestion bucket
+    Type: String
+  S3IngestionBucketEC2ResultPath:
+    Description: This parameter holds CloudWatch log group result in S3 ingestion bucket
+    Type: String
+  S3PreparedBucketStackName:
+    Description: This parameter holds S3 prepared bucket Stack Name
+    Type: String
+  S3PreparedBucketScriptPath:
+    Description: >-
+      This parameter holds S3 bucket script path. Glue creates a script and
+      stores in this path
+    Type: String
+  DWGluePreparedBucketSecurityConfigurationName:
+    Description: This parameter holds SecurityConfiguration name
+    Type: String
+  S3PreparedSparkLogPath:
+    Description: This parameter holds S3 prepared bucket spark log path
+    Type: String
+  DWGluePreparedBucketIAMRoleStackName:
+    Description: >-
+      This parameter holds Glue IAM role to export s3 ingestion bucket data to
+      S3 prepared bucket
+    Type: String
+  S3PreparedBucketEC2LogsScriptName:
+    Description: >-
+      This parameter holds Glue EC2 logs processing script name in S3 prepared
+      bucket
+    Type: String
+  S3PreparedBucketDDBLogsScriptName:
+    Description: >-
+      This parameter holds Glue EC2 logs processing script name in S3 prepared
+      bucket
+    Type: String
+Resources:
+  DWGluePreparedBucketDatabase:
+    Type: 'AWS::Glue::Database'
+    Properties:
+      CatalogId: !Ref 'AWS::AccountId'
+      DatabaseInput:
+        Description: This is the S3 ingestion bucket export Glue Data Catalog database
+  DWGluePreparedBucketSecurityConfiguration:
+    Type: 'AWS::Glue::SecurityConfiguration'
+    Properties:
+      EncryptionConfiguration:
+        CloudWatchEncryption:
+          KmsKeyArn: !ImportValue 
+            'Fn::Sub': '${KMSStackName}-KmsKeyArn'
+          CloudWatchEncryptionMode: SSE-KMS
+        JobBookmarksEncryption:
+          KmsKeyArn: !ImportValue 
+            'Fn::Sub': '${KMSStackName}-KmsKeyArn'
+          JobBookmarksEncryptionMode: CSE-KMS
+        S3Encryptions:
+          - KmsKeyArn: !ImportValue 
+              'Fn::Sub': '${KMSStackName}-KmsKeyArn'
+            S3EncryptionMode: SSE-KMS
+      Name: !Ref DWGluePreparedBucketSecurityConfigurationName
+  DWGluePreparedBucketCrawler:
+    Type: 'AWS::Glue::Crawler'
+    Properties:
+      Role: !ImportValue 
+        'Fn::Sub': '${DWGluePreparedBucketIAMRoleStackName}-DWGlueIAMRoleArn'
+      DatabaseName: !Ref DWGluePreparedBucketDatabase
+      CrawlerSecurityConfiguration: !Ref DWGluePreparedBucketSecurityConfiguration
+      Targets:
+        S3Targets:
+          - Path: !Join 
+              - ''
+              - - 's3://'
+                - !ImportValue 
+                  'Fn::Sub': '${S3IngestionBucketStackName}-BucketName'
+                - /
+                - !Ref S3IngestionBucketDDBExportResultPath
+                - /
+          - Path: !Join 
+              - ''
+              - - 's3://'
+                - !ImportValue 
+                  'Fn::Sub': '${S3IngestionBucketStackName}-BucketName'
+                - /
+                - !Ref S3IngestionBucketEC2ResultPath
+                - /
+      TablePrefix: dw_glue_prepared_
+      SchemaChangePolicy:
+        UpdateBehavior: UPDATE_IN_DATABASE
+        DeleteBehavior: LOG
+      Schedule:
+        ScheduleExpression: cron(0 10 * * ? *)
+  DWGluePreparedBucketJob:
+    Type: 'AWS::Glue::Job'
+    Properties:
+      AllocatedCapacity: 5
+      GlueVersion: '1.0'
+      Command:
+        Name: glueetl
+        PythonVersion: '3'
+        ScriptLocation: !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3PreparedBucketStackName}-BucketName'
+            - !Ref S3PreparedBucketScriptPath
+            - !Ref S3PreparedBucketDDBLogsScriptName
+      Description: >-
+        This is a Data warehouse job to export ingestion bucket to prepared
+        bucket
+      DefaultArguments:
+        '--job-bookmark-option': job-bookmark-enable
+        '--TempDir': !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3PreparedBucketStackName}-BucketName'
+            - !Ref S3PreparedBucketScriptPath
+        '--enable-metrics': true
+        '--enable-spark-ui': true
+        '--spark-event-logs-path': !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3PreparedBucketStackName}-BucketName'
+            - !Ref S3PreparedSparkLogPath
+        '--S3_BUCKET': !ImportValue 
+          'Fn::Sub': '${S3PreparedBucketStackName}-BucketName'
+        '--GLUE_DBNAME': !Ref DWGluePreparedBucketDatabase
+        '--GLUE_TABLENAME': !Join 
+          - ''
+          - - dw_glue_prepared_
+            - !Ref S3IngestionBucketDDBExportResultPath
+        '--enable-continuous-cloudwatch-log': true
+        '--enable-continuous-log-filter': true
+      Role: !ImportValue 
+        'Fn::Sub': '${DWGluePreparedBucketIAMRoleStackName}-DWGlueIAMRoleArn'
+      SecurityConfiguration: !Ref DWGluePreparedBucketSecurityConfiguration
+      Tags:
+        Tag1: Data warehouse Job
+      Timeout: '60'
+  DWGluePreparedBucketEC2Job:
+    Type: 'AWS::Glue::Job'
+    Properties:
+      AllocatedCapacity: 5
+      GlueVersion: '1.0'
+      Command:
+        Name: glueetl
+        PythonVersion: '3'
+        ScriptLocation: !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3PreparedBucketStackName}-BucketName'
+            - !Ref S3PreparedBucketScriptPath
+            - !Ref S3PreparedBucketEC2LogsScriptName
+      Description: >-
+        This is a Data warehouse job to export ingestion bucket to prepared
+        bucket
+      DefaultArguments:
+        '--job-bookmark-option': job-bookmark-enable
+        '--TempDir': !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3PreparedBucketStackName}-BucketName'
+            - !Ref S3PreparedBucketScriptPath
+        '--enable-metrics': true
+        '--enable-spark-ui': true
+        '--spark-event-logs-path': !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3PreparedBucketStackName}-BucketName'
+            - !Ref S3PreparedSparkLogPath
+        '--S3_BUCKET': !ImportValue 
+          'Fn::Sub': '${S3PreparedBucketStackName}-BucketName'
+        '--GLUE_DBNAME': !Ref DWGluePreparedBucketDatabase
+        '--GLUE_TABLENAME': !Join 
+          - ''
+          - - dw_glue_prepared_
+            - !Ref S3IngestionBucketEC2ResultPath
+        '--enable-continuous-cloudwatch-log': true
+        '--enable-continuous-log-filter': true
+      Role: !ImportValue 
+        'Fn::Sub': '${DWGluePreparedBucketIAMRoleStackName}-DWGlueIAMRoleArn'
+      SecurityConfiguration: !Ref DWGluePreparedBucketSecurityConfiguration
+      Tags:
+        Tag1: Data warehouse Job
+      Timeout: '60'
+  DWGluePreparedBucketTrigger:
+    Type: 'AWS::Glue::Trigger'
+    Properties:
+      Actions:
+        - JobName: !Ref DWGluePreparedBucketJob
+          SecurityConfiguration: !Ref DWGluePreparedBucketSecurityConfiguration
+          Arguments:
+            '--job-bookmark-option': job-bookmark-enable
+          Timeout: 60
+      Description: This is a Data warehouse prepared bucket transformation trigger
+      Schedule: cron(0 11 * * ? *)
+      StartOnCreation: true
+      Tags:
+        Tag1: Data Warehouse Trigger
+      Type: SCHEDULED
+  DWGluePreparedBucketEC2Trigger:
+    Type: 'AWS::Glue::Trigger'
+    Properties:
+      Actions:
+        - JobName: !Ref DWGluePreparedBucketEC2Job
+          SecurityConfiguration: !Ref DWGluePreparedBucketSecurityConfiguration
+          Arguments:
+            '--job-bookmark-option': job-bookmark-enable
+          Timeout: 60
+      Description: This is a Data warehouse prepared bucket transformation trigger
+      Schedule: cron(0 11 * * ? *)
+      StartOnCreation: true
+      Tags:
+        Tag1: Data Warehouse Trigger
+      Type: SCHEDULED
+Outputs:
+  DWGluePreparedBucketDatabase:
+    Description: This output holds the Data warehouse Glue Data Catalog database name
+    Value: !Ref DWGluePreparedBucketDatabase
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGluePreparedBucketDatabase'
+  DWGluePreparedBucketSecurityConfiguration:
+    Description: >-
+      This output holds the Data warehouse Glue Security Configuration object
+      name
+    Value: !Ref DWGluePreparedBucketSecurityConfiguration
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGluePreparedBucketSecurityConfiguration'
+  DWGluePreparedBucketCrawler:
+    Description: This output holds the Data warehouse Glue S3 ingestion bucket crawler name
+    Value: !Ref DWGluePreparedBucketCrawler
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGluePreparedBucketCrawler'
+  DWGluePreparedBucketJob:
+    Description: >-
+      This output holds the Data warehouse Glue job which export s3 ingestion
+      bucket data to S3 prepared bucket
+    Value: !Ref DWGluePreparedBucketJob
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGluePreparedBucketJob'
+  DWGluePreparedBucketEC2Job:
+    Description: >-
+      This output holds the Data warehouse Glue job which export s3 ingestion
+      bucket data to S3 prepared bucket
+    Value: !Ref DWGluePreparedBucketEC2Job
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGluePreparedBucketEC2Job'
+  DWGluePreparedBucketTrigger:
+    Description: >-
+      This output holds the Data warehouse Glue Trigger which triggers the job
+      present created in this stack
+    Value: !Ref DWGluePreparedBucketTrigger
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGluePreparedBucketTrigger'
+  DWGluePreparedBucketEC2Trigger:
+    Description: >-
+      This output holds the Data warehouse Glue Trigger which triggers the job
+      present created in this stack
+    Value: !Ref DWGluePreparedBucketEC2Trigger
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGluePreparedBucketEC2Trigger'

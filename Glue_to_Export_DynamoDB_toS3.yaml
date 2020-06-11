@@ -1,0 +1,211 @@
+Description: AWS Glue DynamoDB Export
+Parameters:
+  KMSStackName:
+    Description: This parameter holds KMS Key generated stack name
+    Type: String
+  DynamoDBStackName:
+    Description: This parameter holds Dynamo Database Stack Name
+    Type: String
+  S3IngestionBucketStackName:
+    Description: This parameter holds Dynamo Database Stack Name
+    Type: String
+  S3IngestionBucketScriptPath:
+    Description: >-
+      This parameter holds S3 bucket script path. Glue creates a script and
+      stores in this path
+    Type: String
+  DWGlueSecurityConfigurationName:
+    Description: This parameter holds SecurityConfiguration name
+    Type: String
+  S3IngestionBucketSparkLogPath:
+    Description: This parameter holds SecurityConfiguration name
+    Type: String
+Resources:
+  DWGlueIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: >-
+        This IAM role is associated with Glue Crawler and Glue Job to export
+        DynamoDB tables to S3 bucket
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole'
+      Path: /service-role/
+      Tags:
+        - Key: Tag1
+          Value: DWGlueIAMRole
+  DWGlueIAMRolePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: >-
+        This IAM policy provides access to Glue to crawl and perform job
+        activities. This is a customized policy and must be used for specific
+        use cases
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+              - 'logs:CreateLogStream'
+              - 'dynamodb:DescribeTable'
+              - 'logs:DescribeLogStreams'
+              - 'dynamodb:Scan'
+              - 'logs:AssociateKmsKey'
+              - 'logs:CreateLogGroup'
+              - 'logs:PutLogEvents'
+            Resource: '*'
+      Roles:
+        - !Ref DWGlueIAMRole
+  DWGlueDDBExportDatabase:
+    Type: 'AWS::Glue::Database'
+    Properties:
+      CatalogId: !Ref 'AWS::AccountId'
+      DatabaseInput:
+        Description: This is the DynamoDB export Glue Data Catalog database
+  DWGlueSecurityConfiguration:
+    Type: 'AWS::Glue::SecurityConfiguration'
+    Properties:
+      EncryptionConfiguration:
+        CloudWatchEncryption:
+          KmsKeyArn: !ImportValue 
+            'Fn::Sub': '${KMSStackName}-KmsKeyArn'
+          CloudWatchEncryptionMode: SSE-KMS
+        JobBookmarksEncryption:
+          KmsKeyArn: !ImportValue 
+            'Fn::Sub': '${KMSStackName}-KmsKeyArn'
+          JobBookmarksEncryptionMode: CSE-KMS
+        S3Encryptions:
+          - KmsKeyArn: !ImportValue 
+              'Fn::Sub': '${KMSStackName}-KmsKeyArn'
+            S3EncryptionMode: SSE-KMS
+      Name: !Ref DWGlueSecurityConfigurationName
+  DWGlueDDBExportCrawler:
+    Type: 'AWS::Glue::Crawler'
+    Properties:
+      Role: !GetAtt 
+        - DWGlueIAMRole
+        - Arn
+      DatabaseName: !Ref DWGlueDDBExportDatabase
+      CrawlerSecurityConfiguration: !Ref DWGlueSecurityConfiguration
+      Targets:
+        DynamoDBTargets:
+          - Path: !ImportValue 
+              'Fn::Sub': '${DynamoDBStackName}-DynamoDBTableName'
+      TablePrefix: DW_Glue_
+      SchemaChangePolicy:
+        UpdateBehavior: UPDATE_IN_DATABASE
+        DeleteBehavior: LOG
+      Schedule:
+        ScheduleExpression: cron(0 8 * * ? *)
+  DWGlueDDBExportJob:
+    Type: 'AWS::Glue::Job'
+    Properties:
+      AllocatedCapacity: 5
+      Command:
+        Name: glueetl
+        PythonVersion: '3'
+        ScriptLocation: !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3IngestionBucketStackName}-BucketName'
+            - !Ref S3IngestionBucketScriptPath
+      Description: >-
+        This is a Data warehouse job to export dynamodb table to ingestion
+        bucket
+      DefaultArguments:
+        '--job-bookmark-option': job-bookmark-enable
+        '--TempDir': !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3IngestionBucketStackName}-BucketName'
+            - !Ref S3IngestionBucketScriptPath
+        '--enable-metrics': true
+        '--enable-spark-ui': true
+        '--spark-event-logs-path': !Join 
+          - ''
+          - - 's3://'
+            - !ImportValue 
+              'Fn::Sub': '${S3IngestionBucketStackName}-BucketName'
+            - !Ref S3IngestionBucketSparkLogPath
+        '--enable-continuous-cloudwatch-log': true
+        '--enable-continuous-log-filter': true
+      Role: !GetAtt 
+        - DWGlueIAMRole
+        - Arn
+      SecurityConfiguration: !Ref DWGlueSecurityConfiguration
+      Tags:
+        Tag1: Data warehouse Job
+      Timeout: '60'
+  DWGlueTrigger:
+    Type: 'AWS::Glue::Trigger'
+    Properties:
+      Actions:
+        - JobName: !Ref DWGlueDDBExportJob
+          SecurityConfiguration: !Ref DWGlueSecurityConfiguration
+          Arguments:
+            '--job-bookmark-option': job-bookmark-enable
+          Timeout: 60
+      Description: This is a Data warehouse trigger
+      Schedule: cron(0 9 * * ? *)
+      StartOnCreation: true
+      Tags:
+        Tag1: Data Warehouse Trigger
+      Type: SCHEDULED
+Outputs:
+  DWGlueDDBExportDatabase:
+    Description: This output holds the Data warehouse Glue Data Catalog database name
+    Value: !Ref DWGlueDDBExportDatabase
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGlueDDBExportDatabase'
+  DWGlueSecurityConfiguration:
+    Description: >-
+      This output holds the Data warehouse Glue Security Configuration object
+      name
+    Value: !Ref DWGlueSecurityConfiguration
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGlueSecurityConfiguration'
+  DWGlueDDBExportCrawler:
+    Description: This output holds the Data warehouse Glue DynamoDB crawler name
+    Value: !Ref DWGlueDDBExportCrawler
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGlueDDBExportCrawler'
+  DWGlueDDBExportJob:
+    Description: >-
+      This output holds the Data warehouse Glue job which export DynamoDB data
+      to S3 bucket
+    Value: !Ref DWGlueDDBExportJob
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGlueDDBExportJob'
+  DWGlueTrigger:
+    Description: >-
+      This output holds the Data warehouse Glue Trigger which triggers the job
+      present created in this stack
+    Value: !Ref DWGlueTrigger
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGlueTrigger'
+  DWGlueIAMRolePolicy:
+    Description: >-
+      This output holds the Data warehouse IAM managed policy with is associated
+      with Glue IAM role that is created in this stack
+    Value: !Ref DWGlueIAMRolePolicy
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGlueIAMRolePolicy'
+  DWGlueIAMRole:
+    Description: >-
+      This output holds the Data warehouse Glue IAM role which is associated
+      with Glue crawler and job that are created in this stack
+    Value: !Ref DWGlueIAMRole
+    Export:
+      Name: !Sub '${AWS::StackName}-DWGlueIAMRole'

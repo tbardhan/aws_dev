@@ -81,6 +81,44 @@ Mappings:
       SecurityBestPractices: >-
         arn:aws-us-gov:inspector:us-gov-west-1:850862329162:rulespackage/0-rOTGqe5G
 Resources:
+  DWEventRuleIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: AWS_Allow_Inspector_Assessment
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'inspector:StartAssessmentRun'
+                Resource: '*'
+      Description: Role for scheduled Inspector assessment from Cloudwatch Events
+      Path: /
+      Tags:
+        - Key: Tag1
+          Value: DWEventRuleIAMRole
+  DatalakeEventRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: This event rule is used to schedule Inspector template
+      ScheduleExpression: rate(7 days)
+      State: ENABLED
+      Targets:
+        - Arn: !Ref DatalakeAssessmentTemplate
+          Id: InspectorAssessmentTemplateTarget
+          RoleArn: !GetAtt 
+            - DWEventRuleIAMRole
+            - Arn
   DatalakeEC2ResourceGroup:
     Type: 'AWS::Inspector::ResourceGroup'
     Properties:
@@ -95,11 +133,10 @@ Resources:
     Type: 'AWS::Inspector::AssessmentTarget'
     Properties:
       ResourceGroupArn: !Ref DatalakeEC2ResourceGroup
-  Datalakeassessmenttemplate:
+  DatalakeAssessmentTemplate:
     Type: 'AWS::Inspector::AssessmentTemplate'
     Properties:
       AssessmentTargetArn: !Ref DatalakeAssessmentTarget
-      AssessmentTemplateName: Datalakeassessmenttemplate
       DurationInSeconds: 3600
       RulesPackageArns:
         - !FindInMap 
@@ -118,3 +155,38 @@ Resources:
           - RegionMap
           - !Ref 'AWS::Region'
           - SecurityBestPractices
+Outputs:
+  DatalakeEC2ResourceGroup:
+    Description: >-
+      This output will get the EC2 resorce group ARN that is to be used as
+      Assessment Target
+    Value: !Ref DatalakeEC2ResourceGroup
+    Export:
+      Name: !Sub '${AWS::StackName}-DatalakeEC2ResourceGroup'
+  DatalakeAssessmentTarget:
+    Description: This is assessment target
+    Value: !Ref DatalakeAssessmentTarget
+    Export:
+      Name: !Sub '${AWS::StackName}-DatalakeAssessmentTarget'
+  DatalakeAssessmentTemplate:
+    Description: This is Assessment template.
+    Value: !Ref DatalakeAssessmentTemplate
+    Export:
+      Name: !Sub '${AWS::StackName}-DatalakeAssessmentTemplate'
+  DWEventRuleIAMRole:
+    Description: This is event rule target IAM role.
+    Value: !Ref DWEventRuleIAMRole
+    Export:
+      Name: !Sub '${AWS::StackName}-DWEventRuleIAMRole'
+  DWEventRuleIAMRoleArn:
+    Description: This is event rule target IAM role arn.
+    Value: !GetAtt 
+      - DWEventRuleIAMRole
+      - Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DWEventRuleIAMRoleArn'
+  DatalakeEventRule:
+    Description: This is Assessment template evevnt rule.
+    Value: !Ref DatalakeEventRule
+    Export:
+      Name: !Sub '${AWS::StackName}-DatalakeEventRule'

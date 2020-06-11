@@ -1,0 +1,72 @@
+Description: AWS Data Warehouse EC2 IAM Role
+Resources:
+  DWEC2LaunchGroupInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref DWEC2LaunchGroupRole
+  DWEC2LaunchGroupRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: >-
+        This IAM role is associated with Data Warehouse EC2 public and private
+        instances
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy'
+        - 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore'
+        - 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+      Policies:
+        - PolicyName: EC2_Data_Warehouse_Custom_Policy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                  - 'kms:*'
+                Resource: '*'
+      Path: /
+      Tags:
+        - Key: Tag1
+          Value: DWEC2LaunchGroupRole
+Outputs:
+  DWEC2LaunchGroupRole:
+    Description: >-
+      This output holds the Data warehouse IAM role which is associated with EC2
+      instances that are created in the EC2 stack
+    Value: !Ref DWEC2LaunchGroupRole
+    Export:
+      Name: !Sub '${AWS::StackName}-DWEC2LaunchGroupRole'
+  DWEC2LaunchGroupRoleArn:
+    Description: >-
+      This output holds the Data warehouse IAM role Arn which is associated with
+      EC2 instances that are created in the EC2 stack
+    Value: !GetAtt 
+      - DWEC2LaunchGroupRole
+      - Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DWEC2LaunchGroupRoleArn'
+  DWEC2LaunchGroupInstanceProfile:
+    Description: This output holds the Data warehouse IAM Instance Profile
+    Value: !Ref DWEC2LaunchGroupInstanceProfile
+    Export:
+      Name: !Sub '${AWS::StackName}-DWEC2LaunchGroupInstanceProfile'
+  DWEC2LaunchGroupInstanceProfileArn:
+    Description: >-
+      This output holds the Data warehouse IAM role instance profile ARN which
+      is associated with EC2 instances that are created in the EC2 stack
+    Value: !GetAtt 
+      - DWEC2LaunchGroupInstanceProfile
+      - Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DWEC2LaunchGroupInstanceProfileArn'

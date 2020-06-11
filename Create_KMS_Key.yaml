@@ -1,51 +1,128 @@
-
----
-AWSTemplateFormatVersion: "2010-09-09"
-Description: "Create customer managed CMK KMS keys"
-Outputs:
-  S3KmsKeyId:
-    Description: "The KMS Key used"
-    Export:
-      Name: S3KmsKeyId
-    Value: DWKMSKey
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create customer managed CMK KMS keys
+Parameters:
+  AdministratorsRole:
+    Description: The parameter holds name of AWS Administrators Group
+    Type: String
+  KMSKeyAccessRole:
+    Description: The parameter holds name of AWS KMS Key Access Group
+    Type: String
 Resources:
   DWKMSKey:
     Properties:
-      Description: "Datawarehouse key"
-      EnableKeyRotation: "True"
+      Description: Datawarehouse KMS Key
+      EnableKeyRotation: true
+      Enabled: true
       KeyPolicy:
         Id: key-default-1
         Statement:
-          -
-            Action:
-              - "kms:Create*"
-              - "kms:Describe*"
-              - "kms:Enable*"
-              - "kms:List*"
-              - "kms:Put*"
-              - "kms:Update*"
-              - "kms:Revoke*"
-              - "kms:Disable*"
-              - "kms:Get*"
-              - "kms:Delete*"
-              - "kms:ScheduleKeyDeletion"
-              - "kms:CancelKeyDeletion"
+          - Sid: Allow ec2 instances to use KMS
             Effect: Allow
             Principal:
-              AWS: "arn:aws:iam::xxxxxxxxxxx:root"
-            Resource: "*"
-            Sid: "Allow administration of the key"
-          -
-            Action:
-              - "kms:Encrypt"
-              - "kms:Decrypt"
-              - "kms:ReEncrypt"
-              - "kms:GenerateDataKey*"
-              - "kms:DescribeKey"
+              Service: ec2.amazonaws.com
+            Action: 'kms:*'
+            Resource: '*'
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow cloud watch to use KMS
             Effect: Allow
             Principal:
-              AWS: "arn:aws:iam::xxxxxxxxxxx:user/USER"
-            Resource: "*"
-            Sid: "Allow use of the key"
-        Version: "2012-10-17"
-    Type: "AWS::KMS::Key"
+              Service:
+                - !Join 
+                  - ''
+                  - - logs.
+                    - !Ref 'AWS::Region'
+                    - .amazonaws.com
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow SNS to use KMS
+            Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow CloudTrail to encrypt logs
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: 'kms:*'
+            Resource: '*'
+            Condition:
+              StringLike:
+                'kms:EncryptionContext:aws:cloudtrail:arn': !Join 
+                  - ''
+                  - - 'arn:aws:cloudtrail:*:'
+                    - !Ref 'AWS::AccountId'
+                    - ':trail/*'
+          - Action:
+              - 'kms:*'
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':root'
+            Resource: '*'
+            Sid: Enable IAM User Permissions
+          - Action:
+              - 'kms:Create*'
+              - 'kms:Describe*'
+              - 'kms:Enable*'
+              - 'kms:List*'
+              - 'kms:Put*'
+              - 'kms:Update*'
+              - 'kms:Revoke*'
+              - 'kms:Disable*'
+              - 'kms:Get*'
+              - 'kms:Delete*'
+              - 'kms:ScheduleKeyDeletion'
+              - 'kms:CancelKeyDeletion'
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':role/'
+                    - !Ref AdministratorsRole
+            Resource: '*'
+            Sid: Allow administration of the key
+          - Sid: Allow use of the key
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':role/'
+                    - !Ref KMSKeyAccessRole
+            Action:
+              - 'kms:DescribeKey'
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey'
+              - 'kms:GenerateDataKeyWithoutPlaintext'
+            Resource: '*'
+        Version: 2012-10-17
+    Type: 'AWS::KMS::Key'
+Outputs:
+  KmsKeyId:
+    Description: The KMS Key used by data warehouse
+    Export:
+      Name: !Sub '${AWS::StackName}-KmsKeyId'
+    Value: !Ref DWKMSKey
+  KmsKeyArn:
+    Description: The KMS Key Arn
+    Value: !GetAtt 
+      - DWKMSKey
+      - Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-KmsKeyArn'

@@ -3,10 +3,16 @@ Description: Create SNS Topic for DW Solution
 Parameters:
   KMSStackName:
     Type: String
+  OperatorEmail:
+    Type: String
 Resources:
   DataWarehouseTopic:
     Type: 'AWS::SNS::Topic'
     Properties:
+      Subscription:
+      - Endpoint:
+          Ref: OperatorEmail
+        Protocol: email
       KmsMasterKeyId: !ImportValue 
         'Fn::Sub': '${KMSStackName}-KmsKeyId'
 Outputs:
